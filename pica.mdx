@@ -63,6 +63,7 @@ Mintlify MDX supports Markdown \+ JSX components \+ callouts. Here’s your cont
 ---
 
 ## title: 🚀 Building Apps with Pica \+ InstantDB
+
 description: Build a waiting list app with real-time signups and automatic welcome emails using Pica \+ InstantDB \+ Next.js.
 
 # 🚀 Building Apps with **Pica** \+ **InstantDB** is Easier Than Ever
@@ -150,7 +151,7 @@ export const db = init({
 Step 4. API for Sending Emails\
 📂 `src/app/api/send-welcome-email/route.ts`
 
-``` expandable
+```expandable
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
@@ -211,7 +212,7 @@ export async function POST(request: NextRequest) {
 Step 5. Signup Form Component\
 📂 `src/components/EmailSignup.tsx`
 
-``` expandable
+```expandable
 "use client";
 
 import { useState } from "react";

@@ -1,96 +1,402 @@
 ---
 title: "Windsurf setup"
-description: "Configure Windsurf for your documentation workflow"
+description: "---
+title: 🚀 Building Apps with Pica + InstantDB
+description: Build a real-time waiting list app with automatic welcome emails using Pica + InstantDB in under 150 lines of code.
+---
+
+# 🚀 Building Apps with **Pica** + **InstantDB** is Easier Than Ever
+
+Most apps today need two things:
+
+- A **database** to store and update data.
+- An **integration layer** to send emails, connect APIs, or trigger workflows.
+
+Traditionally, that means setting up:
+
+- SQL databases, migrations, ORMs
+- OAuth flows, SMTP servers, or 3rd-party email APIs
+- Hours of boilerplate before you even ship your MVP
+
+But what if you could skip all that?
+
+With [**Pica**](https://picaos.com/) + [**InstantDB**](https://instantdb.com/) you can build full-stack apps in minutes, not days.
+
+---
+
+## Why Pica + InstantDB?
+
+- **InstantDB** → real-time, schema-less database. Add data, query it, and get live updates — no setup required.
+- **Pica** → A unified API platform with hundreds of integrations (Gmail, Slack, Notion, QuickBooks, Shopify, and more). One secure API key handles everything, no OAuth flows needed.
+- **Next.js** → modern React-based full-stack framework.
+
+With this stack, you can build:
+
+- 📧 Mailing lists  
+- 💬 Real-time chat apps  
+- ✅ To-do apps with email reminders  
+- 📊 Admin dashboards with live updates  
+
+👉 In this guide, we’ll build a **waiting list app** with real-time signups and automatic Gmail welcome emails.
+
+---
+
+## What You’ll Build
+
+- A user signs up → their info appears in your dashboard instantly.  
+- At the same time → they get a personalized Gmail welcome email.  
+- All this with **less than 150 lines of code**.  
+
+:::tip
+A full demo app (including admin panel with live stats & signup table) will be available here: **GitHub Repo**
+:::
+
+---
+
+## Step 1. Install Dependencies
+
+```bash
+npx create-next-app@latest waiting-list --typescript --tailwind --app
+cd waiting-list
+npm install @instantdb/react @instantdb/core
+"
 icon: "water"
 ---
 
-Configure Windsurf's Cascade AI assistant to help you write and maintain documentation. This guide shows how to set up Windsurf specifically for your Mintlify documentation workflow.
+Got it — you want this tutorial turned into **Mintlify-compatible MDX** so it can be used directly in your Mintlify docs.\
+Mintlify MDX supports Markdown \+ JSX components \+ callouts. Here’s your content refactored properly:
 
-## Prerequisites
-
-- Windsurf editor installed
-- Access to your documentation repository
-
-## Workspace rules
-
-Create workspace rules that provide Windsurf with context about your documentation project and standards.
-
-Create `.windsurf/rules.md` in your project root:
-
-````markdown
-# Mintlify technical writing rule
-
-## Project context
-
-- This is a documentation project on the Mintlify platform
-- We use MDX files with YAML frontmatter  
-- Navigation is configured in `docs.json`
-- We follow technical writing best practices
-
-## Writing standards
-
-- Use second person ("you") for instructions
-- Write in active voice and present tense
-- Start procedures with prerequisites
-- Include expected outcomes for major steps
-- Use descriptive, keyword-rich headings
-- Keep sentences concise but informative
-
-## Required page structure
-
-Every page must start with frontmatter:
-
-```yaml
+````
 ---
-title: "Clear, specific title"
-description: "Concise description for SEO and navigation"
+title: 🚀 Building Apps with Pica + InstantDB
+description: Build a waiting list app with real-time signups and automatic welcome emails using Pica + InstantDB + Next.js.
 ---
+
+# 🚀 Building Apps with **Pica** + **InstantDB** is Easier Than Ever
+
+Most apps today need two things:
+
+- A **database** to store and update data.
+- An **integration layer** to send emails, connect APIs, or trigger workflows.
+
+Traditionally, that means setting up:
+
+- SQL databases, migrations, ORMs
+- OAuth flows, SMTP servers, or 3rd-party email APIs
+- Hours of boilerplate before you even ship your MVP
+
+But what if you could skip all that?
+
+With [**Pica**](https://picaos.com/) + [**InstantDB**](https://instantdb.com/) you can build full-stack apps in minutes, not days.
+
+---
+
+## Why Pica + InstantDB?
+
+- **InstantDB** → real-time, schema-less database. Add data, query it, and get live updates — no setup required.
+- **Pica** → **A unified API platform with hundreds of integrations (Gmail, Slack, Notion, QuickBooks, Shopify, and more).** No need for custom OAuth workflows—just one secure API key handles everything.
+- **Next.js** → modern React-based full-stack framework.
+
+With this stack, you can build:
+
+- 📧 Mailing lists (what we’ll demo here)
+- 💬 Real-time chat apps
+- ✅ To-do apps with email reminders
+- 📊 Admin dashboards with live updates
+
+👉 In this guide, we’ll build a **waiting list app** with real-time signups and automatic welcome emails.
+
+---
+
+## What You’ll Get
+
+- A user signs up → their info appears in your dashboard instantly.
+- At the same time → they get a personalized Gmail welcome email.
+- All this with **less than 150 lines of code**.
+
+> 💡 Full demo app (including an admin panel with live stats & signup table) will be available here: `GitHub Repo`
+
+---
+
+## Step 1. Install Dependencies
+
+```bash
+npx create-next-app@latest waiting-list --typescript --tailwind --app
+cd waiting-list
+npm install @instantdb/react @instantdb/core
+````
+
+---
+
+## Step 2. Setup Environment
+
+Create `.env.local`:
+
+```
+NEXT_PUBLIC_INSTANT_APP_ID=your_instant_app_id
+PICA_SECRET_KEY=your_pica_secret_key
+PICA_GMAIL_CONNECTION_KEY=your_gmail_connection_key
 ```
 
-## Mintlify components
+---
 
-### Callouts
+## Step 3. Database Setup
 
-- `<Note>` for helpful supplementary information
-- `<Warning>` for important cautions and breaking changes
-- `<Tip>` for best practices and expert advice  
-- `<Info>` for neutral contextual information
-- `<Check>` for success confirmations
+```
+import { init } from "@instantdb/react";
 
-### Code examples
+// Initialize InstantDB with your App ID
+export const db = init({
+  appId: process.env.NEXT_PUBLIC_INSTANT_APP_ID!,
+});
+```
 
-- When appropriate, include complete, runnable examples
-- Use `<CodeGroup>` for multiple language examples
-- Specify language tags on all code blocks
-- Include realistic data, not placeholders
-- Use `<RequestExample>` and `<ResponseExample>` for API docs
+---
 
-### Procedures
+## Step 4. API for Sending Emails
 
-- Use `<Steps>` component for sequential instructions
-- Include verification steps with `<Check>` components when relevant
-- Break complex procedures into smaller steps
+```
+import { NextRequest, NextResponse } from "next/server";
 
-### Content organization
+export async function POST(request: NextRequest) {
+  const { name, email, plan } = await request.json();
 
-- Use `<Tabs>` for platform-specific content
-- Use `<Accordion>` for progressive disclosure
-- Use `<Card>` and `<CardGroup>` for highlighting content
-- Wrap images in `<Frame>` components with descriptive alt text
+  const subject = "Welcome to the Waiting List!";
+  const htmlBody = `<h2>Hey ${name}, welcome aboard 🚀</h2>
+  <p>You signed up for: <strong>${plan}</strong></p>
+  <p>You’ll be the first to know when we launch.</p>`;
 
-## API documentation requirements
+  const mimeEmail = [
+    `From: your-email@gmail.com`,
+    `To: ${email}`,
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=UTF-8",
+    "",
+    htmlBody,
+  ].join("\r\n");
 
-- Document all parameters with `<ParamField>` 
-- Show response structure with `<ResponseField>`
-- Include both success and error examples
-- Use `<Expandable>` for nested object properties
-- Always include authentication examples
+  const encoder = new TextEncoder();
+  const data = encoder.encode(mimeEmail);
+  const base64 = btoa(String.fromCharCode(...data));
+  const encodedEmail = base64
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
 
-## Quality standards
+  const response = await fetch(
+    "https://api.picaos.com/v1/passthrough/users/me/messages",
+    {
+      method: "POST",
+      headers: {
+        "x-pica-secret": process.env.PICA_SECRET_KEY!,
+        "x-pica-connection-key": process.env.PICA_GMAIL_CONNECTION_KEY!,
+        "x-pica-action-id":
+          "conn_mod_def::F_JeJ3qaLEg::v9ICSQZxR0un5_ketxbCAQ",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        raw: encodedEmail,
+        labelIds: ["INBOX", "UNREAD"],
+      }),
+    }
+  );
 
-- Test all code examples before publishing
-- Use relative paths for internal links
-- Include alt text for all images
-- Ensure proper heading hierarchy (start with h2)
-- Check existing patterns for consistency
-````
+  if (!response.ok) {
+    const err = await response.text();
+    return NextResponse.json({ error: err }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+```
+
+---
+
+## Step 5. Signup Form Component
+
+```
+"use client";
+
+import { useState } from "react";
+import { db } from "@/lib/db";
+import { id } from "@instantdb/react";
+
+export default function EmailSignup() {
+  const [formData, setFormData] = useState({ name: "", email: "", plan: "Early Access" });
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+
+  const { data } = db.useQuery({ signups: {} });
+  const signupCount = data?.signups?.length || 0;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus("loading");
+
+    try {
+      const signupId = id();
+
+      await db.transact([
+        db.tx.signups[signupId].update({
+          ...formData,
+          createdAt: new Date(),
+        }),
+      ]);
+
+      await fetch("/api/send-welcome-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      setStatus("success");
+      setFormData({ name: "", email: "", plan: "Early Access" });
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Join the Waiting List</h1>
+          <p className="text-gray-600 font-medium">Be the first to know when we launch</p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Name */}
+            <input
+              type="text"
+              placeholder="Your name"
+              value={formData.name}
+              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg"
+              required
+            />
+            {/* Email */}
+            <input
+              type="email"
+              placeholder="you@example.com"
+              value={formData.email}
+              onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg"
+              required
+            />
+            {/* Plan */}
+            <select
+              value={formData.plan}
+              onChange={(e) => setFormData((prev) => ({ ...prev, plan: e.target.value }))}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg"
+              required
+            >
+              <option value="">Select an option</option>
+              <option value="early-access">Early Access</option>
+              <option value="pricing">Special Pricing</option>
+              <option value="features">New Features</option>
+              <option value="updates">Product Updates</option>
+            </select>
+
+            <button
+              type="submit"
+              disabled={status === "loading"}
+              className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg"
+            >
+              {status === "loading" ? "⏳ Joining..." : "🚀 Join Waiting List"}
+            </button>
+          </form>
+
+          {/* Counter */}
+          <div className="text-center pt-2">
+            <span className="text-sm font-semibold text-gray-700">
+              🔥 {signupCount} people have already joined!
+            </span>
+          </div>
+
+          {/* Messages */}
+          {status === "success" && (
+            <p className="mt-2 text-green-700 text-center">🎉 Welcome! Check your email.</p>
+          )}
+          {status === "error" && (
+            <p className="mt-2 text-red-700 text-center">Something went wrong. Try again.</p>
+          )}
+        </div>
+
+        <p className="text-center text-sm text-gray-600 font-medium mt-6">
+          We respect your privacy. No spam, ever. 🔒
+        </p>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## Step 6. Add to Page
+
+```
+import EmailSignup from "@/components/EmailSignup";
+
+export default function Home() {
+  return <EmailSignup />;
+}
+```
+
+---
+
+## Wrap Up
+
+In this tutorial, you learned how to:
+
+- Use **InstantDB** for real-time signups.
+- Use **Pica** to send Gmail emails with zero OAuth pain.
+- Build a working **waiting list app** in under an hour.
+
+But this is just the beginning — you can also build:
+
+- A CRM that emails new leads
+- A task app that sends Slack reminders
+- A dashboard that syncs with Notion
+
+👉 [Try Pica today](https://picaos.com/) and see how much faster you can ship.\
+👉 Check out the **full demo repo with an admin panel**: [GitHub Repo](https://github.com/example/pica-instantdb-waitlist-demo) _(coming soon)_.
+
+---
+
+## Bonus: Add an Admin Panel
+
+```
+// Full admin panel code here...
+```
+
+Then include it in your app:
+
+```
+import EmailSignup from "@/components/EmailSignup";
+import AdminDashboard from "@/components/AdminDashboard";
+
+export default function Home() {
+  return (
+    <div>
+      <EmailSignup />
+      <div className="mt-16">
+        <AdminDashboard />
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+✅ You now have both the **waiting list form** and a **real-time dashboard**.
+
+```
+
+---
+
+Do you want me to **include the full `AdminDashboard.tsx` code block** in the Mintlify MDX too, or just reference it like I did at the bottom?
+```

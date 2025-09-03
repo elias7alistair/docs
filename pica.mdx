@@ -126,7 +126,7 @@ npm install @instantdb/react @instantdb/core
 
 Create `.env.local`:
 
-```
+```javascript
 NEXT_PUBLIC_INSTANT_APP_ID=your_instant_app_id
 PICA_SECRET_KEY=your_pica_secret_key
 PICA_GMAIL_CONNECTION_KEY=your_gmail_connection_key
@@ -137,7 +137,7 @@ PICA_GMAIL_CONNECTION_KEY=your_gmail_connection_key
 Step 3. Database Setup\
 📂 `src/lib/db.ts`
 
-```
+```javascript
 import { init } from "@instantdb/react";
 
 // Initialize InstantDB with your App ID
@@ -151,7 +151,7 @@ export const db = init({
 Step 4. API for Sending Emails\
 📂 `src/app/api/send-welcome-email/route.ts`
 
-```expandable
+```javascript expandable
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
 Step 5. Signup Form Component\
 📂 `src/components/EmailSignup.tsx`
 
-```expandable
+```javascript expandable
 "use client";
 
 import { useState } from "react";
@@ -335,7 +335,7 @@ export default function EmailSignup() {
 Step 6. Add to Page\
 📂 `src/app/page.tsx`
 
-```
+```javascript
 import EmailSignup from "@/components/EmailSignup";
 
 export default function Home() {

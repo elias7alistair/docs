@@ -148,208 +148,40 @@ export function GET() {
 }
 ```
 
-### components/EmailSignup.tsx (attractive, minimal UI)
+### app/api/send-email/route.ts (without Gmail send code)
 
-```tsx
-// components/EmailSignup.tsx
-"use client";
+```ts
+// app/api/send-email/route.ts
+import { NextResponse } from "next/server";
+import { createAction, markActionEmailed } from "@/lib/db";
 
-import { useState } from "react";
-
-export default function EmailSignup() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [waitingFor, setWaitingFor] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
-    try {
-      const res = await fetch("/api/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, waitingFor }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      setMessage({ type: "success", text: "Email sent! Check your inbox." });
-      setName("");
-      setEmail("");
-      setWaitingFor("");
-    } catch (err) {
-      setMessage({ type: "error", text: "Failed to send. Please try again." });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="mx-auto max-w-xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <h2 className="mb-2 text-2xl font-semibold tracking-tight">Get Started</h2>
-      <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">Tell us what you’re waiting for and we’ll email you.</p>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="name" className="mb-1 block text-sm font-medium">Name</label>
-          <input id="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Jane Doe" className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none ring-0 transition focus:border-gray-900 dark:border-gray-700 dark:bg-gray-950" />
-        </div>
-        <div>
-          <label htmlFor="email" className="mb-1 block text-sm font-medium">Email</label>
-          <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="jane@example.com" className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-gray-900 dark:border-gray-700 dark:bg-gray-950" />
-        </div>
-        <div>
-          <label htmlFor="waitingFor" className="mb-1 block text-sm font-medium">What are you waiting for?</label>
-          <textarea id="waitingFor" value={waitingFor} onChange={(e) => setWaitingFor(e.target.value)} required placeholder="Feature X, invite, docs…" rows={4} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-gray-900 dark:border-gray-700 dark:bg-gray-950" />
-        </div>
-        <button type="submit" disabled={loading} className="inline-flex w-full items-center justify-center rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-900 disabled:opacity-50">{loading ? "Sending…" : "Send Email"}</button>
-        <div aria-live="polite" className="min-h-5 text-sm">
-          {message && (
-            <p className={message.type === "success" ? "text-green-600" : "text-red-600"}>{message.text}</p>
-          )}
-        </div>
-      </form>
-    </div>
-  );
-}
-```
-
-### components/AdminDashboard.tsx (clean admin UI)
-
-```tsx
-// components/AdminDashboard.tsx
-"use client";
-
-import { useEffect, useMemo, useState } from "react";
-
-type ActionStatus = "pending" | "emailed" | "resolved";
-interface ActionItem {
-  id: string;
+interface Body {
   name: string;
   email: string;
   waitingFor: string;
-  status: ActionStatus;
-  createdAt: number;
 }
 
-export default function AdminDashboard() {
-  const [data, setData] = useState<ActionItem[]>([]);
-  const [status, setStatus] = useState<ActionStatus | "all">("all");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export async function POST(req: Request) {
+  try {
+    const body = (await req.json()) as Partial<Body>;
+    const name = body.name?.trim();
+    const email = body.email?.trim();
+    const waitingFor = body.waitingFor?.trim();
 
-  const filtered = useMemo(
-    () => (status === "all" ? data : data.filter((d) => d.status === status)),
-    [data, status]
-  );
-
-  async function fetchData(currentStatus?: ActionStatus | "all") {
-    setLoading(true);
-    setError(null);
-    try {
-      const qs = currentStatus && currentStatus !== "all" ? `?status=${currentStatus}` : "";
-      const res = await fetch(`/api/actions${qs}`, { cache: "no-store" });
-      if (!res.ok) throw new Error(await res.text());
-      const rows = (await res.json()) as ActionItem[];
-      setData(rows);
-    } catch (err) {
-      setError("Failed to load actions");
-    } finally {
-      setLoading(false);
+    if (!name || !email || !waitingFor) {
+      return NextResponse.json({ ok: false, error: "Invalid input" }, { status: 400 });
     }
+
+    const action = await createAction({ name, email, waitingFor });
+
+    // TODO: Invoke Pica MCP Gmail send here (see prompt below);
+    // On success:
+    await markActionEmailed(action.id);
+
+    return NextResponse.json({ ok: true, id: action.id });
+  } catch (err) {
+    return NextResponse.json({ ok: false, error: "Failed to send" }, { status: 500 });
   }
-
-  useEffect(() => {
-    fetchData(status);
-  }, [status]);
-
-  async function updateStatus(id: string, next: Exclude<ActionStatus, "pending">) {
-    const prev = data;
-    setData((rows) => rows.map((r) => (r.id === id ? { ...r, status: next } : r)));
-    try {
-      const res = await fetch(`/api/actions/${id}/status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: next }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-    } catch (err) {
-      setData(prev);
-    }
-  }
-
-  return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-6 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-        <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600 dark:text-gray-400">Status</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value as any)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950">
-            <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="emailed">Emailed</option>
-            <option value="resolved">Resolved</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-          <thead className="bg-gray-50 dark:bg-gray-950">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Email</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Waiting For</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Created</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-500">Loading…</td>
-              </tr>
-            ) : error ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-red-600">{error}</td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-500">No actions found</td>
-              </tr>
-            ) : (
-              filtered.map((row) => (
-                <tr key={row.id}>
-                  <td className="px-4 py-3 text-sm">{row.name}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{row.email}</td>
-                  <td className="px-4 py-3 text-sm">{row.waitingFor}</td>
-                  <td className="px-4 py-3 text-sm">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${
-                      row.status === "pending"
-                        ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
-                        : row.status === "emailed"
-                        ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200"
-                        : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200"
-                    }`}>
-                      {row.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{new Date(row.createdAt).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button disabled={row.status !== "pending"} onClick={() => updateStatus(row.id, "emailed")} className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-blue-700 transition hover:bg-blue-50 disabled:opacity-50 dark:border-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900/20">Mark Emailed</button>
-                      <button disabled={row.status === "resolved"} onClick={() => updateStatus(row.id, "resolved")} className="rounded-lg border border-emerald-200 px-3 py-1.5 text-sm text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:text-emerald-300 dark:hover:bg-emerald-900/20">Mark Resolved</button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 }
 ```
 
@@ -394,90 +226,79 @@ Create `app/api/health/route.ts` with a minimal GET handler that returns JSON `{
 
 ---
 
-## 3) Prompt: Add API route to send Gmail via Pica
+## 3) Prompt: Use Pica Gmail with MIME and base64url encoding (exact libs)
 
-We will add a route `app/api/send-email/route.ts` that:
-- Validates payload `{ name, email, waitingFor }`
-- Persists an action (status: "pending")
-- Sends an email via Pica Gmail
-- Marks status "emailed" on success
-- Returns a concise JSON result
+Use this prompt to wire the Gmail call in `app/api/send-email/route.ts`. Specify exact libraries to avoid errors.
 
 ```text
-Add `app/api/send-email/route.ts` with a POST handler that does the following:
+Edit `app/api/send-email/route.ts` to send email via Pica Gmail.
 
 REQUIREMENTS
-- Accept JSON body: { name: string, email: string, waitingFor: string }
-- Validate input; return 400 on invalid
-- Create an action in DB via `createAction`
-- Use Pica MCP Gmail to send an email:
-  - Subject: "Welcome, ${name}!"
-  - Body (text): "Thanks for signing up. We got your note about waiting for: ${waitingFor}. We'll be in touch."
-  - From: use a connected Gmail account via Pica
-  - To: the provided `email`
-- On successful send, call `markActionEmailed(id)` and return `{ ok: true, id }`
-- On failure, return 500 with an error summary; do not expose secrets
+- Build a RFC 5322 MIME message using `mimetext` (npm package `mimetext`)
+- Encode to base64url using `base64url` (npm package `base64url`), NOT Buffer.toString("base64") and manual replace
+- Use Pica MCP Gmail action to send the raw message (base64url)
+- Keep subject: "Welcome, ${name}!" and body text: "Thanks for signing up. We got your note about waiting for: ${waitingFor}. We'll be in touch."
 
-IMPLEMENTATION NOTES
-- Use a server-only module for Pica calls if available in this project. Otherwise, add a small helper in `lib/pica.ts` that invokes the Gmail send action given { to, subject, text }.
-- Ensure route is edge/runtime-compatible for this project’s defaults.
-- Keep logging minimal and safe for server.
+STEPS
+1) Install deps:
+   - `npm i mimetext base64url`
+2) Build MIME:
+   ```ts
+   import { MimeBuilder } from "mimetext";
+   import base64url from "base64url";
+
+   const message = new MimeBuilder("text/plain")
+     .setSender("Your Name <me@example.com>")
+     .setRecipient(`${name} <${email}>`)
+     .setSubject(`Welcome, ${name}!`)
+     .setMessage(`Thanks for signing up. We got your note about waiting for: ${waitingFor}. We'll be in touch.`)
+     .asRaw();
+
+   const raw = base64url(Buffer.from(message));
+   ```
+3) Call Pica Gmail send action with `{ raw }` and your connected Gmail account
+4) On success, call `markActionEmailed(action.id)`
+5) Return `{ ok: true, id: action.id }`
 ```
 
 ---
 
-## 4) Prompt: Create UI for sending email
+## 4) Prompts: Create UI (Cursor-only prompts, no code pasted here)
 
-Create a simple client component/form for users to send the email. Place it at `components/EmailSignup.tsx` and render it on the homepage.
+Use these prompts to have Cursor generate the UIs without copy-pasting code in this guide.
+
+### Prompt: EmailSignup UI (attractive)
 
 ```text
-Implement a client component `components/EmailSignup.tsx` with a form having fields:
-- email (required, email)
-- name (required)
-- waitingFor (required, textarea)
+Create `components/EmailSignup.tsx` as a Client Component with a modern, attractive form:
+- Fields: name (text), email (email), waitingFor (textarea) — all required
+- Styling: Tailwind, rounded cards, clear labels, accessible aria-live messages
+- Submit POST to `/api/send-email`, disable while pending, optimistic reset on success
+- Export default component and render it in `app/page.tsx`
+```
 
-BEHAVIOR
-- On submit, POST to `/api/send-email` with the form data
-- Disable submit while pending, show success/error messages
-- Minimal, clean styling using Tailwind (if present) or basic CSS classes from the project
-- Accessibility: use labels, aria-live for status messages
+### Prompt: AdminDashboard UI
 
-TYPES
-- Define a local type for the payload
-
-INTEGRATION
-- Update `app/page.tsx` to import and render `<EmailSignup />`
+```text
+Create `components/AdminDashboard.tsx` as a Client Component:
+- Controls: status filter (all | pending | emailed | resolved)
+- Table: name, email, waitingFor, status, createdAt
+- Actions: per-row buttons to mark emailed/resolved (disable appropriately)
+- Fetch from `GET /api/actions?status=...`, update via `POST /api/actions/{id}/status`
+- Attractive Tailwind styling; optimistic updates with fallback
+- Create `app/admin/page.tsx` to render it
 ```
 
 ---
 
-## 5) Prompt: Create UI for admin panel
-
-Create an admin dashboard to list actions, filter by status, and update statuses.
+## 5) Prompt: Create API endpoints for Admin list/update
 
 ```text
-Create `components/AdminDashboard.tsx` as a Client Component that allows:
-
-VIEWS
-- Table listing actions: name, email, waitingFor, status, createdAt
-- Filter by status (all | pending | emailed | resolved)
-
-ACTIONS
-- Buttons per row: "Mark Emailed", "Mark Resolved" (disable based on current status)
-
-DATA
-- Create two API endpoints:
-  - `GET /api/actions?status=...` → returns list
-  - `POST /api/actions/{id}/status` with body { status: "emailed" | "resolved" }
-- Implement these routes to use `listActions`, `markActionEmailed`, `markActionResolved`
-
-UX
-- Optimistic UI updates with graceful fallback on error
-- Inline toasts or status indicators
-- Keep logic readable and well-typed
-
-INTEGRATION
-- Create `app/admin/page.tsx` to render the dashboard. Restrict access later; for now, no auth.
+Implement two endpoints:
+1) `GET /api/actions?status=` → returns `ActionItem[]` using `listActions`
+2) `POST /api/actions/{id}/status` body { status: "emailed" | "resolved" } → uses `markActionEmailed` or `markActionResolved`
+- Validate status values; return 400 on invalid
+- Keep responses JSON: { ok: true }
 ```
 
 ---

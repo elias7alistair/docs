@@ -1,80 +1,344 @@
+## Build the Action Tracker App Using Prompts (with Pica MCP)
+
+This guide shows how to build the Action Tracker app using prompts only. We'll assume your Pica MCP is already configured. We'll focus on:
+
+- **Instant DB**: schema and client setup
+- **Minimal API route**: health check placeholder
+- **Email sending route via Pica Gmail**: server action/route
+- **UI for sending email**: email, name, waitingFor
+- **Admin panel UI**: list, filter, and update statuses
+
+Use the following prompts directly in your IDE assistant. Adjust names/paths if your project structure differs.
+
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+
+### Prerequisites
+
+- A Next.js app (App Router) with TypeScript
+- Pica MCP connected (we'll skip setup here)
+- Environment variables prepared for your DB and Pica secret (we'll reference them in prompts)
+
 ---
 
-## Get started in three steps
+## Zero-start: Create Next App (optional)
 
-Get your documentation site running locally and make your first customization.
+If you’re starting fresh, run:
 
-### Step 1: Set up your local environment
+```bash
+npx create-next-app@latest action-tracker \
+  --ts \
+  --app \
+  --eslint \
+  --tailwind \
+  --src-dir false \
+  --import-alias "@/*"
+cd action-tracker
+```
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Add required envs to `.env.local`:
 
-### Step 2: Deploy your changes
+```bash
+INSTANT_DB_URL=your_db_url
+INSTANT_DB_KEY=your_db_key
+PICA_SECRET=your_pica_secret
+```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+---
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Copy-paste reference snippets (to avoid hallucinations)
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+These minimal examples ensure the prompts have a ground truth.
 
-### Step 3: Go live
+### instant.schema.ts
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```ts
+// instant.schema.ts
+export type ActionStatus = "pending" | "emailed" | "resolved";
 
-## Next steps
+export interface ActionItem {
+  id: string; // uuid
+  name: string;
+  email: string;
+  waitingFor: string;
+  status: ActionStatus;
+  createdAt: number; // epoch ms
+}
+```
 
-Now that you have your docs running, explore these key features:
+### lib/db.ts (thin client)
 
-<CardGroup cols={2}>
+```ts
+// lib/db.ts
+import type { ActionItem, ActionStatus } from "../instant.schema";
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+const dbUrl = process.env.INSTANT_DB_URL!;
+const dbKey = process.env.INSTANT_DB_KEY!;
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+if (!dbUrl || !dbKey) {
+  throw new Error("Missing INSTANT_DB_URL or INSTANT_DB_KEY env");
+}
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${dbUrl}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${dbKey}`,
+      ...(init?.headers || {}),
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`DB request failed ${res.status}: ${text}`);
+  }
+  return (await res.json()) as T;
+}
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+export async function createAction(input: {
+  name: string;
+  email: string;
+  waitingFor: string;
+}): Promise<ActionItem> {
+  const payload = {
+    ...input,
+    status: "pending" as const,
+    createdAt: Date.now(),
+  };
+  // Replace with your Instant DB create endpoint
+  return request<ActionItem>(`/actions`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
 
-</CardGroup>
+export async function listActions(filter?: {
+  status?: ActionStatus;
+}): Promise<ActionItem[]> {
+  const query = filter?.status ? `?status=${encodeURIComponent(filter.status)}` : "";
+  // Replace with your Instant DB list endpoint
+  return request<ActionItem[]>(`/actions${query}`);
+}
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+export async function markActionEmailed(id: string): Promise<ActionItem> {
+  // Replace with your Instant DB update endpoint
+  return request<ActionItem>(`/actions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "emailed" as const }),
+  });
+}
+
+export async function markActionResolved(id: string): Promise<ActionItem> {
+  // Replace with your Instant DB update endpoint
+  return request<ActionItem>(`/actions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "resolved" as const }),
+  });
+}
+```
+
+### app/api/health/route.ts (bare minimum)
+
+```ts
+// app/api/health/route.ts
+import { NextResponse } from "next/server";
+
+export function GET() {
+  return NextResponse.json({ ok: true, ts: Date.now() });
+}
+```
+
+### app/api/send-email/route.ts (without Gmail send code)
+
+```ts
+// app/api/send-email/route.ts
+import { NextResponse } from "next/server";
+import { createAction, markActionEmailed } from "@/lib/db";
+
+interface Body {
+  name: string;
+  email: string;
+  waitingFor: string;
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = (await req.json()) as Partial<Body>;
+    const name = body.name?.trim();
+    const email = body.email?.trim();
+    const waitingFor = body.waitingFor?.trim();
+
+    if (!name || !email || !waitingFor) {
+      return NextResponse.json({ ok: false, error: "Invalid input" }, { status: 400 });
+    }
+
+    const action = await createAction({ name, email, waitingFor });
+
+    // TODO: Invoke Pica MCP Gmail send here (see prompt below);
+    // On success:
+    await markActionEmailed(action.id);
+
+    return NextResponse.json({ ok: true, id: action.id });
+  } catch (err) {
+    return NextResponse.json({ ok: false, error: "Failed to send" }, { status: 500 });
+  }
+}
+```
+
+---
+
+## 1) Prompt: Set up Instant DB schema and client
+
+Use this prompt to create an Instant DB schema and a thin client in `lib/db.ts`.
+
+```text
+You are pair-programming with me. Implement a minimal Instant DB setup for a Next.js (App Router, TS) app:
+
+GOALS
+- Create a simple schema for an "actions" collection with fields: id (string, uuid), name (string), email (string), waitingFor (string), status ("pending" | "emailed" | "resolved"), createdAt (number, epoch ms)
+- Add a light-weight DB client in `lib/db.ts` exposing CRUD helpers:
+  - createAction({ name, email, waitingFor }) → creates doc with status "pending"
+  - listActions({ status? }) → lists by optional status filter, newest first
+  - markActionEmailed(id) → sets status to "emailed"
+  - markActionResolved(id) → sets status to "resolved"
+- Keep implementation simple and deterministic; prefer explicit typing. Use environment variables for DB URL/keys if needed, e.g. INSTANT_DB_URL, INSTANT_DB_KEY.
+- Ensure the file can be imported from server code and React Server Components safely.
+
+DELIVERABLES
+- New file `instant.schema.ts` with schema definition
+- Update/create `lib/db.ts` with typed helpers
+- Add any minimal utility code required. Do not bring in heavy ORMs.
+
+NOTES
+- Use high-clarity TypeScript types, no `any`.
+- Avoid runtime-heavy abstractions; write straightforward code.
+```
+
+---
+
+## 2) Prompt: Add a bare-minimum health route
+
+Create a minimal route at `app/api/health/route.ts` to validate SSR/runtime and serve as a template.
+
+```text
+Create `app/api/health/route.ts` with a minimal GET handler that returns JSON `{ ok: true, ts: Date.now() }`. Use Next.js App Router conventions, export `GET` with `NextResponse.json`. Keep it tiny and typed.
+```
+
+---
+
+## 3) Prompt: Use Pica Gmail with MIME and base64url encoding (exact libs)
+
+Use this prompt to wire the Gmail call in `app/api/send-email/route.ts`. Specify exact libraries to avoid errors.
+
+```text
+Edit `app/api/send-email/route.ts` to send email via Pica Gmail.
+
+REQUIREMENTS
+- Build a RFC 5322 MIME message using `mimetext` (npm package `mimetext`)
+- Encode to base64url using `base64url` (npm package `base64url`), NOT Buffer.toString("base64") and manual replace
+- Use Pica MCP Gmail action to send the raw message (base64url)
+- Keep subject: "Welcome, ${name}!" and body text: "Thanks for signing up. We got your note about waiting for: ${waitingFor}. We'll be in touch."
+
+STEPS
+1) Install deps:
+   - `npm i mimetext base64url`
+2) Build MIME:
+   ```ts
+   import { MimeBuilder } from "mimetext";
+   import base64url from "base64url";
+
+   const message = new MimeBuilder("text/plain")
+     .setSender("Your Name <me@example.com>")
+     .setRecipient(`${name} <${email}>`)
+     .setSubject(`Welcome, ${name}!`)
+     .setMessage(`Thanks for signing up. We got your note about waiting for: ${waitingFor}. We'll be in touch.`)
+     .asRaw();
+
+   const raw = base64url(Buffer.from(message));
+   ```
+3) Call Pica Gmail send action with `{ raw }` and your connected Gmail account
+4) On success, call `markActionEmailed(action.id)`
+5) Return `{ ok: true, id: action.id }`
+```
+
+---
+
+## 4) Prompts: Create UI (Cursor-only prompts, no code pasted here)
+
+Use these prompts to have Cursor generate the UIs without copy-pasting code in this guide.
+
+### Prompt: EmailSignup UI (attractive)
+
+```text
+Create `components/EmailSignup.tsx` as a Client Component with a modern, attractive form:
+- Fields: name (text), email (email), waitingFor (textarea) — all required
+- Styling: Tailwind, rounded cards, clear labels, accessible aria-live messages
+- Submit POST to `/api/send-email`, disable while pending, optimistic reset on success
+- Export default component and render it in `app/page.tsx`
+```
+
+### Prompt: AdminDashboard UI
+
+```text
+Create `components/AdminDashboard.tsx` as a Client Component:
+- Controls: status filter (all | pending | emailed | resolved)
+- Table: name, email, waitingFor, status, createdAt
+- Actions: per-row buttons to mark emailed/resolved (disable appropriately)
+- Fetch from `GET /api/actions?status=...`, update via `POST /api/actions/{id}/status`
+- Attractive Tailwind styling; optimistic updates with fallback
+- Create `app/admin/page.tsx` to render it
+```
+
+---
+
+## 5) Prompt: Create API endpoints for Admin list/update
+
+```text
+Implement two endpoints:
+1) `GET /api/actions?status=` → returns `ActionItem[]` using `listActions`
+2) `POST /api/actions/{id}/status` body { status: "emailed" | "resolved" } → uses `markActionEmailed` or `markActionResolved`
+- Validate status values; return 400 on invalid
+- Keep responses JSON: { ok: true }
+```
+
+---
+
+## 6) Prompt: Wire environment variables and config
+
+Set up the environment variables needed and verify build/runtime.
+
+```text
+Add/readme notes for required env vars (do not commit secrets):
+- INSTANT_DB_URL=
+- INSTANT_DB_KEY=
+- PICA_SECRET=
+
+Validate that all server-side modules reading env are only imported server-side. Run dev build to ensure types are sound and routes compile.
+```
+
+---
+
+## 7) Prompt: Lightweight QA
+
+Use this to test happy-path flows.
+
+```text
+Test plan:
+1. Load `/` and submit the email form with valid inputs → expect success toast
+2. Confirm DB has a new action with status "emailed"
+3. Load `/admin` → see the new row, filter by status
+4. Change status to "resolved" → row updates; reload page to confirm persistence
+5. Hit `/api/health` → `{ ok: true }` JSON
+```
+
+---
+
+### What we skipped
+
+- Pica MCP connection setup and secrets management. Add those per your environment.
+
+### Next steps
+
+- Add auth to `/admin`
+- Add pagination and search
+- Add HTML email template and analytics

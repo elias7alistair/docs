@@ -40,101 +40,11 @@ Add required envs to `.env.local`:
 ```bash
 INSTANT_DB_URL=your_db_url
 INSTANT_DB_KEY=your_db_key
-PICA_SECRET=your_pica_secret
+PICA_SECRET=your_pica_secrlib/db.ts (thin client)
 ```
 
----
-
-## Copy-paste reference snippets (to avoid hallucinations)
-
-These minimal examples ensure the prompts have a ground truth.
-
-### instant.schema.ts
-
 ```ts
-// instant.schema.ts
-export type ActionStatus = "pending" | "emailed" | "resolved";
-
-export interface ActionItem {
-  id: string; // uuid
-  name: string;
-  email: string;
-  waitingFor: string;
-  status: ActionStatus;
-  createdAt: number; // epoch ms
-}
-```
-
-### lib/db.ts (thin client)
-
-```ts
-// lib/db.ts
-import type { ActionItem, ActionStatus } from "../instant.schema";
-
-const dbUrl = process.env.INSTANT_DB_URL!;
-const dbKey = process.env.INSTANT_DB_KEY!;
-
-if (!dbUrl || !dbKey) {
-  throw new Error("Missing INSTANT_DB_URL or INSTANT_DB_KEY env");
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${dbUrl}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${dbKey}`,
-      ...(init?.headers || {}),
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`DB request failed ${res.status}: ${text}`);
-  }
-  return (await res.json()) as T;
-}
-
-export async function createAction(input: {
-  name: string;
-  email: string;
-  waitingFor: string;
-}): Promise<ActionItem> {
-  const payload = {
-    ...input,
-    status: "pending" as const,
-    createdAt: Date.now(),
-  };
-  // Replace with your Instant DB create endpoint
-  return request<ActionItem>(`/actions`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function listActions(filter?: {
-  status?: ActionStatus;
-}): Promise<ActionItem[]> {
-  const query = filter?.status ? `?status=${encodeURIComponent(filter.status)}` : "";
-  // Replace with your Instant DB list endpoint
-  return request<ActionItem[]>(`/actions${query}`);
-}
-
-export async function markActionEmailed(id: string): Promise<ActionItem> {
-  // Replace with your Instant DB update endpoint
-  return request<ActionItem>(`/actions/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status: "emailed" as const }),
-  });
-}
-
-export async function markActionResolved(id: string): Promise<ActionItem> {
-  // Replace with your Instant DB update endpoint
-  return request<ActionItem>(`/actions/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status: "resolved" as const }),
-  });
-}
+√
 ```
 
 ### app/api/health/route.ts (bare minimum)
@@ -150,40 +60,256 @@ export function GET() {
 
 ### app/api/send-email/route.ts (without Gmail send code)
 
-```ts
-// app/api/send-email/route.ts
-import { NextResponse } from "next/server";
-import { createAction, markActionEmailed } from "@/lib/db";
+````ts
 
-interface Body {
-  name: string;
-  email: string;
-  waitingFor: string;
-}
+## Build a Waitlist App with InstantDB + Pica (Prompt-Only Guide)
 
-export async function POST(req: Request) {
-  try {
-    const body = (await req.json()) as Partial<Body>;
-    const name = body.name?.trim();
-    const email = body.email?.trim();
-    const waitingFor = body.waitingFor?.trim();
+This section mirrors the app we just built: attractive waitlist form, InstantDB write, and Gmail send via Pica. Copy the prompts into your IDE assistant to generate files.
 
-    if (!name || !email || !waitingFor) {
-      return NextResponse.json({ ok: false, error: "Invalid input" }, { status: 400 });
-    }
+### 0) Create Next App
 
-    const action = await createAction({ name, email, waitingFor });
-
-    // TODO: Invoke Pica MCP Gmail send here (see prompt below);
-    // On success:
-    await markActionEmailed(action.id);
-
-    return NextResponse.json({ ok: true, id: action.id });
-  } catch (err) {
-    return NextResponse.json({ ok: false, error: "Failed to send" }, { status: 500 });
-  }
-}
+```bash
+npx create-next-app@latest waitlist-app \
+  --ts \
+  --app \
+  --eslint \
+  --tailwind \
+  --src-dir false \
+  --import-alias "@/*"
+cd waitlist-app
 ```
+
+### 1) Environment Variables
+
+Add a `.env.local` file with:
+
+```bash
+NEXT_PUBLIC_INSTANT_APP_ID=your_instant_app_id
+
+PICA_SECRET_KEY=your_pica_secret_key
+PICA_GMAIL_CONNECTION_KEY=your_gmail_connection_key
+```
+
+- Get your Pica API key at: [Pica API Keys](https://app.picaos.com/settings/api-keys)
+- Connect Gmail at: [Pica Connections](https://app.picaos.com/connections)
+
+### 2) Prompt: Create InstantDB client with schema
+
+```text
+Create a TypeScript file at path: lib/db.ts
+
+Requirements:
+- Use imports:
+  import { init } from '@instantdb/react';
+  import { i } from '@instantdb/core';
+- Define a schema with one entity: signups
+  - Fields:
+    - name: string
+    - email: string
+    - interest: string (optional)
+    - status: string // 'pending', 'confirmed', 'notified'
+    - welcomeEmailSent: boolean
+    - createdAt: date
+- Initialize and export an InstantDB client with this schema using NEXT_PUBLIC_INSTANT_APP_ID
+- Export the schema type
+
+Exact file contents:
+------------------------------------------------
+import { init } from '@instantdb/react';
+import { i } from '@instantdb/core';
+
+// Define your schema
+const schema = i.schema({
+  entities: {
+    signups: i.entity({
+      name: i.string(),
+      email: i.string(),
+      interest: i.string().optional(),
+      status: i.string(), // 'pending', 'confirmed', 'notified'
+      welcomeEmailSent: i.boolean(),
+      createdAt: i.date(),
+    }),
+  },
+});
+
+export const db = init({
+  appId: process.env.NEXT_PUBLIC_INSTANT_APP_ID!,
+  schema,
+});
+
+export type Schema = typeof schema;
+------------------------------------------------
+
+Notes:
+- Keep exact indentation and spacing.
+```
+
+### 3) Prompt: Email route that uses Pica Gmail passthrough
+
+```text
+Create a TypeScript file at path: app/api/send-welcome-email/route.ts
+
+Requirements:
+- App Router API route (Next.js 13+):
+  import { NextRequest, NextResponse } from 'next/server';
+- Parse JSON body: { name: string; email: string; signupId: string }
+- Construct an HTML email with a styled welcome message
+- Build a MIME message with:
+  From: your Gmail (placeholder: your-email@gmail.com)
+  To, Subject, MIME-Version, Content-Type: text/html; charset=UTF-8
+- Base64url-encode the MIME (Gmail requirement)
+- Call Pica Gmail passthrough:
+  POST https://api.picaos.com/v1/passthrough/users/me/messages
+  Headers:
+    - x-pica-secret: process.env.PICA_SECRET_KEY!
+    - x-pica-connection-key: process.env.PICA_GMAIL_CONNECTION_KEY!
+    - x-pica-action-id: 'conn_mod_def::F_JeJ3qaLEg::v9ICSQZxR0un5_ketxbCAQ'
+    - Content-Type: 'application/json'
+  Body: { raw: <base64url string>, labelIds: ['INBOX','UNREAD'] }
+- On success: return { success: true, messageId, message }
+- On error: return 500 with { success: false, error, details }
+
+Use the exact contents we validated earlier.
+```
+
+### 4) Prompt: Attractive form UI (client page)
+
+```text
+Create `app/page.tsx` as a Client Component with an attractive form to collect:
+- name (text), email (email), interest (select with options: early-access, pricing, features, updates)
+
+Requirements:
+- Tailwind-based glassy/gradient card style
+- On submit:
+  1) Create a `signups` row in InstantDB with fields { name, email, interest, status: 'pending', welcomeEmailSent: false, createdAt: new Date() }
+  2) Call `POST /api/send-welcome-email` with { name, email, signupId }
+  3) If success, update the row to { status: 'notified', welcomeEmailSent: true }
+- Show loading, success, and error states
+```
+
+---
+
+## Admin Panel (Prompt-Only Guide)
+
+Build an admin panel to view and manage signups.
+
+### 1) Prompt: Admin page and dashboard component
+
+```text
+Create `app/admin/page.tsx` and `components/AdminDashboard.tsx`.
+
+AdminDashboard requirements:
+- Controls: filter by status (all | pending | notified)
+- Table: name, email, interest, status, createdAt
+- Per-row action to set status to 'confirmed' or back to 'pending'
+- Attractive Tailwind styling; optimistic update UX
+
+Implementation hints:
+- Fetch initial data via a server action or route that reads from InstantDB
+- Use `db.transact([ db.tx.signups[id].update({ status: 'confirmed' }) ])` for updates
+```
+
+### 2) Prompt: Admin API endpoints
+
+```text
+Create two routes:
+1) `app/api/signups/route.ts` (GET) → list signups; optional `?status=pending|notified|confirmed`
+2) `app/api/signups/[id]/status/route.ts` (POST) → body { status: 'pending' | 'notified' | 'confirmed' }
+
+Behavior:
+- Validate inputs and return 400 on invalid
+- Use InstantDB transact updates against `signups`
+- Respond JSON { ok: true }
+```
+
+### 3) Prompt: Environment recap
+
+```text
+Ensure `.env.local` contains:
+- NEXT_PUBLIC_INSTANT_APP_ID=
+- PICA_SECRET_KEY=
+- PICA_GMAIL_CONNECTION_KEY=
+
+Get Pica API key: https://app.picaos.com/settings/api-keys
+Connect Gmail: https://app.picaos.com/connections
+```
+
+Links: [Pica API Keys](https://app.picaos.com/settings/api-keys), [Pica Connections](https://app.picaos.com/connections)
+
+---
+
+## Prompts-Only: Build a Beautiful Waitlist App + Admin (No Code Snippets)
+
+Use the following prompts in your IDE assistant to generate the entire app. Do not paste code from this blog; simply use the prompts in sequence. No MCP required.
+
+### Prompt 1 — Initialize the Project
+
+```text
+Create a new Next.js (App Router, TypeScript, Tailwind, ESLint) project named "waitlist-pro". Add a modern base layout and global styles with a dark gradient background and clean typography. Ensure Tailwind is wired and a minimal landing page renders.
+```
+
+### Prompt 2 — Environment Variables
+
+```text
+Add a .env.local with:
+- NEXT_PUBLIC_INSTANT_APP_ID=
+- PICA_SECRET_KEY=
+- PICA_GMAIL_CONNECTION_KEY=
+
+Document where to obtain values and link in README:
+- Pica API keys: https://app.picaos.com/settings/api-keys
+- Pica Gmail connection: https://app.picaos.com/connections
+Validate env loading in development.
+```
+
+### Prompt 3 — InstantDB Client and Schema
+
+```text
+Create an InstantDB client and schema in lib/db.ts using @instantdb/react and @instantdb/core. Define an entity `signups` with fields: name (string), email (string), interest (optional string), status (string: 'pending' | 'confirmed' | 'notified'), welcomeEmailSent (boolean), createdAt (date). Export the initialized client and the schema type. Ensure it compiles on both server and client as needed.
+```
+
+### Prompt 4 — Email API Route (Pica Gmail)
+
+```text
+Create an App Router API route at app/api/send-welcome-email/route.ts. Accept JSON body { name, email, signupId }. Generate a polished HTML welcome email (attractive header, friendly copy). Build an RFC 5322 MIME message with Content-Type text/html; encode as base64url; send via Pica Gmail passthrough (POST https://api.picaos.com/v1/passthrough/users/me/messages) with headers x-pica-secret, x-pica-connection-key, x-pica-action-id. Return JSON with success or error details.
+```
+
+### Prompt 5 — Attractive Waitlist Form UI
+
+```text
+Design a beautiful client-side form on app/page.tsx with fields: name, email, interest (select with values: early-access, pricing, features, updates). Use a glassy/gradient card look, accessible labels, and clear feedback. On submit: (1) create a `signups` record in InstantDB with status 'pending' and welcomeEmailSent false; (2) call /api/send-welcome-email; (3) on success, set status 'notified' and welcomeEmailSent true; (4) show success message and reset form. Include loading and error states.
+```
+
+### Prompt 6 — Basic Analytics and UX Polish
+
+```text
+Add a lightweight success indicator (toast or inline message) and a simple signup counter that reads from InstantDB. Ensure mobile responsiveness, keyboard accessibility, and focus management on error.
+```
+
+### Prompt 7 — Admin Panel (Pages & Data)
+
+```text
+Create an admin panel at app/admin/page.tsx with a modern dashboard layout. Add a data table listing signups with columns: name, email, interest, status, createdAt. Provide a filter for status (all | pending | notified | confirmed). Implement optimistic updates to set status to 'confirmed' or revert to 'pending' via InstantDB. Include empty-state and loading placeholders.
+```
+
+### Prompt 8 — Admin APIs
+
+```text
+Add admin API routes: (1) GET app/api/signups to list signups (support ?status=), (2) POST app/api/signups/[id]/status to update status. Validate input, return JSON, and handle errors gracefully. Ensure requests are server-only and do not leak secrets.
+```
+
+### Prompt 9 — Readme & Deploy Readiness
+
+```text
+Update README with setup steps, environment variables, links for Pica API keys and Gmail connection, and start commands. Add a short troubleshooting section for common Pica or InstantDB misconfigurations. Ensure build passes and routes compile for production.
+```
+
+### Prompt 10 — QA Scenarios
+
+```text
+Test plan: submit valid form, verify a signup row is created, email is sent, and status becomes 'notified'. Test invalid inputs and network errors show clear messaging. In admin, filter and update statuses; verify persistence after reload. Confirm env variables are required and missing ones surface a helpful error.
+```
+````
 
 ---
 
@@ -230,7 +356,7 @@ Create `app/api/health/route.ts` with a minimal GET handler that returns JSON `{
 
 Use this prompt to wire the Gmail call in `app/api/send-email/route.ts`. Specify exact libraries to avoid errors.
 
-```text
+````text
 Edit `app/api/send-email/route.ts` to send email via Pica Gmail.
 
 REQUIREMENTS
@@ -255,11 +381,13 @@ STEPS
      .asRaw();
 
    const raw = base64url(Buffer.from(message));
-   ```
-3) Call Pica Gmail send action with `{ raw }` and your connected Gmail account
-4) On success, call `markActionEmailed(action.id)`
-5) Return `{ ok: true, id: action.id }`
-```
+````
+
+3. Call Pica Gmail send action with `{ raw }` and your connected Gmail account
+4. On success, call `markActionEmailed(action.id)`
+5. Return `{ ok: true, id: action.id }`
+
+````
 
 ---
 
@@ -275,7 +403,7 @@ Create `components/EmailSignup.tsx` as a Client Component with a modern, attract
 - Styling: Tailwind, rounded cards, clear labels, accessible aria-live messages
 - Submit POST to `/api/send-email`, disable while pending, optimistic reset on success
 - Export default component and render it in `app/page.tsx`
-```
+````
 
 ### Prompt: AdminDashboard UI
 
